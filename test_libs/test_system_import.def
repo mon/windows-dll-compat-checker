@@ -1,0 +1,5 @@
+LIBRARY TEST_SYSTEM.dll
+EXPORTS
+    Foo
+    Bar
+    Baz

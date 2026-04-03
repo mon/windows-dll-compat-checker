@@ -1,0 +1,3 @@
+LIBRARY test_system.dll
+EXPORTS
+    Foo

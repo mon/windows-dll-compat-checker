@@ -1,0 +1,3 @@
+LIBRARY Test_Transitive.dll
+EXPORTS
+    TransFoo

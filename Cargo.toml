@@ -1,0 +1,15 @@
+[package]
+name = "windows_dll_compat_checker"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+case_insensitive_string = "0.2.10"
+clap = { version = "4.6.0", features = ["derive"] }
+goblin = { version = "0.10.5", default-features = false, features = ["alloc", "pe32", "pe64", "std"] }
+indexmap = "2.13.1"
+rust-ini = "0.21.3"
+
+[dev-dependencies]
+assert_cmd = "2.2.0"
