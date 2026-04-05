@@ -1,11 +1,18 @@
 use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use ini::Ini;
+use rust_embed::Embed;
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Cursor};
 use std::path::Path;
 
 use crate::types::DllExports;
+
+#[derive(Embed)]
+#[folder = "premade_ini/"]
+#[prefix = "PREMADE/"]
+#[include = "*.ini"]
+pub struct EmbeddedInis;
 
 fn encode_unnamed_ranges(ordinals: &mut Vec<u16>) -> String {
     ordinals.sort_unstable();
@@ -68,7 +75,11 @@ fn decode_unnamed_ranges(s: &str, path: &Path, dll_name: &str) -> Result<Vec<u16
 }
 
 pub fn read_ini(path: &Path) -> Result<(Vec<DllExports>, Option<(u16, u16)>)> {
-    let ini = Ini::load_from_file(path)
+    let try_ini = match EmbeddedInis::get(&path.to_string_lossy()) {
+        Some(ini) => Ini::read_from(&mut Cursor::new(&ini.data)),
+        None => Ini::load_from_file(path),
+    };
+    let ini = try_ini
         .with_context(|| format!("failed to load INI file '{}'", path.display()))?;
 
     let mut result = Vec::new();

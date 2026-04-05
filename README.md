@@ -10,6 +10,9 @@ to a .ini file, so you don't need to parse a bunch of PE files every time.
 There are pre-generated .ini files in the `premade_ini` folder for Windows XP as
 well as the Windows 7 + XP images that Konami uses for their arcade machines.
 
+The release build embeds all these .ini files for convenience, in a virtual
+folder called PREMADE. Available embedded INIs are listed in the `--help` output.
+
 Finally, it checks the SubsystemVersion of EXE files, because if that is larger
 than the currently running OS, it will fail to run entirely. Interestingly, DLLs
 do not have that same limitation, and Windows XP will happily load a DLL that
@@ -29,7 +32,7 @@ You feed it a list of binaries, and a list of `--system/-s` DLLs that it will
 check against:
 ```shell
 # use a premade .ini
-windows_dll_compat_checker my_cool_program.exe --system premade_ini/winxp_x86_64.ini
+windows_dll_compat_checker my_cool_program.exe --system PREMADE/winxp_x86_64.ini
 # use an actual folder, it will read every DLL inside (not recursively)
 windows_dll_compat_checker my_cool_program.exe --system X:/Windows/System32
 # override any detected SubsystemVersion with _WIN32_WINNT version constant,

@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use case_insensitive_string::CaseInsensitiveString;
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use indexmap::IndexMap;
 
 use types::{DllExports, Import, PeInput};
@@ -164,8 +164,18 @@ fn collect_inputs(paths: &[PathBuf]) -> Result<(Vec<PeInput>, Vec<DllExports>)> 
     Ok((inputs, exports))
 }
 
+fn premade_ini_help() -> String {
+    let mut names: Vec<_> = ini::EmbeddedInis::iter().collect();
+    names.sort();
+    let list = names.join("\n  ");
+    format!("Available embedded INI files:\n  {list}")
+}
+
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let matches = Cli::command().after_help(premade_ini_help()).get_matches();
+    let cli = Cli::from_arg_matches(&matches)
+        .map_err(|e| e.exit())
+        .unwrap();
 
     if let Some(ref common_path) = cli.merge_common {
         let all_inputs: Vec<(PathBuf, Vec<DllExports>, Option<(u16, u16)>)> = cli.inputs.iter()
