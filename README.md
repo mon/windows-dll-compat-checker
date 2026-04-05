@@ -58,6 +58,14 @@ It's impossible to check (reliably) if a given binary uses the native Thread
 Local Storage (TLS) introduced in Windows Vista, so this tool does not check
 that either.
 
+## Why not Dependency Walker or its many forks?
+
+I wanted a single binary that runs on Linux for CI purposes, with the explicit
+goal of checking against known Windows installs instead of the currently running
+one. Dependency Walker, Dependencies, and WinDepends all have nifty looking CLI
+modes, but they all run on Windows only. Maybe there's something out there for
+my usecase, but I couldn't find it.
+
 ## Building etc
 
 **NOTE** the code is almost entirely AI generated, so don't look too far into
