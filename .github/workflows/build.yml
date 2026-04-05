@@ -47,23 +47,17 @@ jobs:
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
-        run: |
-          mkdir -p dist/${{ matrix.artifact }}
-          cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/${{ matrix.artifact }}/
-          cp -r premade_ini dist/${{ matrix.artifact }}/
-          cd dist && zip -r ${{ matrix.artifact }}.zip ${{ matrix.artifact }}
+        run: zip -j ${{ matrix.artifact }}.zip target/${{ matrix.target }}/release/${{ matrix.binary }}
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path dist/${{ matrix.artifact }} -Force
-          Copy-Item target/${{ matrix.target }}/release/${{ matrix.binary }} dist/${{ matrix.artifact }}/
-          Copy-Item -Recurse premade_ini dist/${{ matrix.artifact }}/
-          Compress-Archive -Path dist/${{ matrix.artifact }} -DestinationPath dist/${{ matrix.artifact }}.zip
+          Copy-Item target/${{ matrix.target }}/release/${{ matrix.binary }} .
+          Compress-Archive -Path ${{ matrix.binary }} -DestinationPath ${{ matrix.artifact }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}.zip
+          path: ${{ matrix.artifact }}.zip
