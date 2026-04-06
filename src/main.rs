@@ -239,7 +239,7 @@ fn main() -> Result<()> {
 
     let os_version = cli.os_version.clone().or_else(|| {
         ini_version.map(|(major, minor)| {
-            println!("Note: using os_version {major}.{minor} from system INI (smallest found)");
+            println!("Note: using os_version {major}.{minor} from system INI");
             OsVersionSpec(major, minor)
         })
     });
