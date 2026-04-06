@@ -43,6 +43,9 @@ struct Cli {
     #[arg(long, value_name = "MAJOR,MINOR")]
     os_version: Option<OsVersionSpec>,
 
+    /// Ignore files matching these names when scanning directories (case insensitive, repeatable)
+    #[arg(short, long, value_name = "FILENAME")]
+    ignore: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -72,7 +75,7 @@ fn is_pe_extension(ext: Option<&OsStr>) -> bool {
     )
 }
 
-fn expand_path_to_pe_files(path: &Path) -> Result<Vec<PathBuf>> {
+fn expand_path_to_pe_files(path: &Path, ignore: &[String]) -> Result<Vec<PathBuf>> {
     if path.is_dir() {
         println!("Loading PE files in {path:?}");
         let entries = fs::read_dir(path)
@@ -83,7 +86,10 @@ fn expand_path_to_pe_files(path: &Path) -> Result<Vec<PathBuf>> {
                 format!("failed to read directory entry in '{}'", path.display())
             })?;
             let p = entry.path();
-            if p.is_file() && is_pe_extension(p.extension()) {
+            let ignored = p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| ignore.iter().any(|ig| n.eq_ignore_ascii_case(ig)));
+            if p.is_file() && is_pe_extension(p.extension()) && !ignored {
                 files.push(p);
             }
         }
@@ -93,7 +99,7 @@ fn expand_path_to_pe_files(path: &Path) -> Result<Vec<PathBuf>> {
     }
 }
 
-fn collect_system_sources(paths: &[PathBuf]) -> Result<(IndexMap<CaseInsensitiveString, DllExports>, Option<(u16, u16)>)> {
+fn collect_system_sources(paths: &[PathBuf], ignore: &[String]) -> Result<(IndexMap<CaseInsensitiveString, DllExports>, Option<(u16, u16)>)> {
     let mut map: IndexMap<CaseInsensitiveString, DllExports> = IndexMap::new();
     let mut min_version: Option<(u16, u16)> = None;
 
@@ -107,7 +113,7 @@ fn collect_system_sources(paths: &[PathBuf]) -> Result<(IndexMap<CaseInsensitive
                 min_version = Some(min_version.map_or(v, |mv| mv.min(v)));
             }
         } else {
-            for file_path in expand_path_to_pe_files(path)? {
+            for file_path in expand_path_to_pe_files(path, ignore)? {
                 let name = file_path
                     .file_name()
                     .and_then(|n| n.to_str())
@@ -131,12 +137,12 @@ fn collect_system_sources(paths: &[PathBuf]) -> Result<(IndexMap<CaseInsensitive
     Ok((map, min_version))
 }
 
-fn collect_inputs(paths: &[PathBuf]) -> Result<(Vec<PeInput>, Vec<DllExports>)> {
+fn collect_inputs(paths: &[PathBuf], ignore: &[String]) -> Result<(Vec<PeInput>, Vec<DllExports>)> {
     let mut inputs = Vec::new();
     let mut exports = Vec::new();
 
     for path in paths {
-        for file_path in expand_path_to_pe_files(path)? {
+        for file_path in expand_path_to_pe_files(path, ignore)? {
             let name = file_path
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -228,7 +234,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let (mut system_map, ini_version) = collect_system_sources(&cli.system)?;
+    let (mut system_map, ini_version) = collect_system_sources(&cli.system, &cli.ignore)?;
     let sys_exports: usize = system_map.values().map(|e| e.exports.len()).sum();
 
     let os_version = cli.os_version.clone().or_else(|| {
@@ -239,7 +245,7 @@ fn main() -> Result<()> {
     });
     println!("Loaded {sys_exports} exports from {} system DLLs", system_map.len());
 
-    let (inputs, input_exports) = collect_inputs(&cli.inputs)?;
+    let (inputs, input_exports) = collect_inputs(&cli.inputs, &cli.ignore)?;
     let in_imports: usize = inputs.iter().flat_map(|i| &i.imports).map(|d| d.imports.len()).sum();
     let in_exports: usize = input_exports.iter().map(|e| e.exports.len()).sum();
     println!("Loaded {in_imports} imports, {in_exports} exports from {} input DLLs", inputs.len());
