@@ -319,7 +319,7 @@ fn main() -> Result<()> {
     }
 
     if errors.is_empty() {
-        println!("\nAll OK!");
+        println!("All DLLs OK!");
     } else {
         for error in &errors {
             eprintln!("{error}");
