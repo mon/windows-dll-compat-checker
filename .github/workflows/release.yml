@@ -31,7 +31,7 @@ jobs:
       - uses: actions/download-artifact@v8
 
       - name: Collect artifacts
-        run: mv */*.zip .
+        run: mv */*.zip */*.tar.xz .
 
       - name: Create or update release
         env:
@@ -40,13 +40,14 @@ jobs:
           PRERELEASE=""
           if ${{ inputs.prerelease }}; then PRERELEASE="--prerelease"; fi
           TITLE="${{ inputs.title || inputs.tag }}"
+          ASSETS=(*.zip *.tar.xz)
           if ${{ inputs.create_release }}; then
             gh release create ${{ inputs.tag }} $PRERELEASE \
               --title "$TITLE" --notes "" \
-              *.zip \
+              "${ASSETS[@]}" \
               -R ${{ github.repository }}
           else
             gh release upload ${{ inputs.tag }} \
-              *.zip --clobber \
+              "${ASSETS[@]}" --clobber \
               -R ${{ github.repository }}
           fi

@@ -45,8 +45,12 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package (Unix)
-        if: runner.os != 'Windows'
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: tar -cJf ${{ matrix.artifact }}.tar.xz -C target/${{ matrix.target }}/release ${{ matrix.binary }}
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
         run: zip -j ${{ matrix.artifact }}.zip target/${{ matrix.target }}/release/${{ matrix.binary }}
 
       - name: Package (Windows)
@@ -60,4 +64,4 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}.zip
+          path: ${{ matrix.artifact }}.*
