@@ -281,6 +281,16 @@ fn main() -> Result<()> {
                         "{}: imports {} function(s) from {} but it was not found in system sources",
                         input.name, dll_imports.imports.len(), dll_imports.dll_name
                     ));
+                    for import in &dll_imports.imports {
+                        match import {
+                            Import::ByName(name) => {
+                                errors.push(format!("  {}", name));
+                            }
+                            Import::ByOrdinal(ord) => {
+                                errors.push(format!("  ordinal {}", ord));
+                            }
+                        }
+                    }
                 }
                 Some(sys) => {
                     for import in &dll_imports.imports {
