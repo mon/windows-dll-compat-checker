@@ -66,6 +66,23 @@ one. Dependency Walker, Dependencies, and WinDepends all have nifty looking CLI
 modes, but they all run on Windows only. Maybe there's something out there for
 my usecase, but I couldn't find it.
 
+## WinSxS is pain
+
+There's some special behaviour in the shell script that pulls in the DLLs for
+- WinHTTP 5.1
+- Shell Common Controls version 6.0 (Comctl32.dll)
+- GDI Plus version 1.0 (GDIplus.dll)
+- Visual C++ Run-time Libraries version 6.0
+
+Here is some background reading as to why this is a thing:
+- [Everything you Never Wanted to Know about WinSxS](https://web.archive.org/web/20140210074243/http://omnicognate.wordpress.com/2009/10/05/winsxs/)
+- [MSDN - Assembly Searching Sequence](https://web.archive.org/web/20140210013454/http://msdn.microsoft.com/en-us/library/aa374224.aspx)
+- [MSDN - Shared Assemblies](https://web.archive.org/web/20121121231305/http://msdn.microsoft.com/en-us/library/aa375996.aspx)
+- [MSDN - Supported Microsoft Side-by-side Assemblies](https://web.archive.org/web/20130104185057/http://msdn.microsoft.com/en-us/library/aa376609.aspx)
+
+The MDSN links are still live right now, but the Shared Assemblies page no
+longer links to "Supported Microsoft Side-by-side Assemblies" which is odd.
+
 ## Building etc
 
 **NOTE** the code is almost entirely AI generated, so don't look too far into
