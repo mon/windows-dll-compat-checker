@@ -75,7 +75,9 @@ fn decode_unnamed_ranges(s: &str, path: &Path, dll_name: &str) -> Result<Vec<u16
 }
 
 pub fn read_ini(path: &Path) -> Result<(Vec<DllExports>, Option<(u16, u16)>)> {
-    let try_ini = match EmbeddedInis::get(&path.to_string_lossy()) {
+    // rust_embed keys always use forward slashes.
+    let embed_key = path.to_string_lossy().replace('\\', "/");
+    let try_ini = match EmbeddedInis::get(&embed_key) {
         Some(ini) => Ini::read_from(&mut Cursor::new(&ini.data)),
         None => Ini::load_from_file(path),
     };
