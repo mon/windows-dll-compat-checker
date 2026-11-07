@@ -1,20 +1,12 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag (e.g. v1.0)'
-        required: true
-      title:
-        description: 'Release title (defaults to tag)'
-      prerelease:
-        type: boolean
-        default: false
-      create_release:
-        description: 'Set false to re-upload assets to an existing tag'
-        type: boolean
-        default: true
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -35,19 +27,11 @@ jobs:
 
       - name: Create or update release
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          PRERELEASE=""
-          if ${{ inputs.prerelease }}; then PRERELEASE="--prerelease"; fi
-          TITLE="${{ inputs.title || inputs.tag }}"
           ASSETS=(*.zip *.tar.xz)
-          if ${{ inputs.create_release }}; then
-            gh release create ${{ inputs.tag }} $PRERELEASE \
-              --title "$TITLE" --notes "" \
-              "${ASSETS[@]}" \
-              -R ${{ github.repository }}
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" &>/dev/null; then
+            gh release upload "$GITHUB_REF_NAME" "${ASSETS[@]}" --clobber -R "$GITHUB_REPOSITORY"
           else
-            gh release upload ${{ inputs.tag }} \
-              "${ASSETS[@]}" --clobber \
-              -R ${{ github.repository }}
+            gh release create "$GITHUB_REF_NAME" "${ASSETS[@]}" --prerelease --title "$GITHUB_REF_NAME" --notes "" -R "$GITHUB_REPOSITORY"
           fi
