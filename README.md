@@ -83,6 +83,13 @@ Here is some background reading as to why this is a thing:
 The MDSN links are still live right now, but the Shared Assemblies page no
 longer links to "Supported Microsoft Side-by-side Assemblies" which is odd.
 
+## Forwarded exports
+
+I also found on Windows 7 that it has API set DLLs that forward to kernel32
+(which is normal for API sets), but kernel32 doesn't have that export on Win7 so
+it blows up anyway. So the INI files keep track of forwarded exports too and
+make sure they point somewhere valid.
+
 ## Building etc
 
 **NOTE** the code is almost entirely AI generated, so don't look too far into

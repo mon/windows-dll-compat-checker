@@ -16,6 +16,67 @@ use indexmap::IndexMap;
 
 use types::{DllExports, Import, PeInput};
 
+fn import_desc(import: &Import) -> String {
+    match import {
+        Import::ByName(name) => format!("'{name}'"),
+        Import::ByOrdinal(ord) => format!("ordinal {ord}"),
+    }
+}
+
+/// Resolves an import against the system map, following forwarder exports
+/// (e.g. api set -> kernel32 -> kernelbase). Err describes the failure,
+/// including the forward chain when one was involved.
+fn resolve_import(
+    system_map: &IndexMap<CaseInsensitiveString, DllExports>,
+    dll_name: &CaseInsensitiveString,
+    import: &Import,
+) -> Result<(), String> {
+    let orig = format!("import {} from '{}'", import_desc(import), dll_name);
+    let mut chain: Vec<String> = Vec::new();
+    let mut dll = dll_name.clone();
+    let mut import = import.clone();
+    loop {
+        let via = if chain.is_empty() {
+            String::new()
+        } else {
+            format!(" forwards via '{}' but", chain.join("' -> '"))
+        };
+        let Some(sys) = system_map.get(&dll) else {
+            return Err(format!("{orig}{via} '{dll}' was not found in system sources"));
+        };
+        let export = match &import {
+            Import::ByName(name) => sys
+                .exports_by_name
+                .get(name.as_str())
+                .and_then(|ord| sys.exports.get(ord)),
+            Import::ByOrdinal(ord) => sys.exports.get(ord),
+        };
+        let Some(export) = export else {
+            return Err(if chain.is_empty() {
+                format!("{orig} not found")
+            } else {
+                format!("{orig}{via} the target export was not found")
+            });
+        };
+        let Some(fw) = &export.forward else {
+            return Ok(());
+        };
+        let target_desc = match &fw.import {
+            Import::ByName(name) => name.clone(),
+            Import::ByOrdinal(ord) => format!("#{ord}"),
+        };
+        chain.push(format!("{}!{}", fw.dll, target_desc));
+        if chain.len() > 32 {
+            return Err(format!(
+                "{orig} has a forward chain that is too long (cycle?): '{}'",
+                chain.join("' -> '")
+            ));
+        }
+        dll = fw.dll.clone();
+        import = fw.import.clone();
+    }
+}
+
 #[derive(Parser)]
 #[command(about = "Validates Windows PE imports against a set of known system DLLs")]
 struct Cli {
@@ -292,25 +353,10 @@ fn main() -> Result<()> {
                         }
                     }
                 }
-                Some(sys) => {
+                Some(_) => {
                     for import in &dll_imports.imports {
-                        match import {
-                            Import::ByName(name) => {
-                                if sys.exports_by_name.get(name.as_str()).is_none() {
-                                    errors.push(format!(
-                                        "'{}': import '{}' from '{}' not found",
-                                        input.name, name, dll_imports.dll_name
-                                    ));
-                                }
-                            }
-                            Import::ByOrdinal(ord) => {
-                                if sys.exports.get(ord).is_none() {
-                                    errors.push(format!(
-                                        "'{}': import ordinal {} from '{}' not found",
-                                        input.name, ord, dll_imports.dll_name
-                                    ));
-                                }
-                            }
+                        if let Err(msg) = resolve_import(&system_map, &dll_imports.dll_name, import) {
+                            errors.push(format!("'{}': {}", input.name, msg));
                         }
                     }
                 }

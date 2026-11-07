@@ -6,7 +6,7 @@ use std::fs::File;
 use std::io::{BufWriter, Cursor};
 use std::path::Path;
 
-use crate::types::DllExports;
+use crate::types::{DllExports, Export, ForwardTarget, Import};
 
 #[derive(Embed)]
 #[folder = "premade_ini/"]
@@ -74,6 +74,41 @@ fn decode_unnamed_ranges(s: &str, path: &Path, dll_name: &str) -> Result<Vec<u16
     Ok(ordinals)
 }
 
+// Forward syntax in values: "Name -> target.dll" (same-name), "Name -> target.dll!Other",
+// "Name -> target.dll!#42" (by ordinal). Unnamed forwarder exports use "-> target.dll!...".
+fn encode_forward(name: Option<&str>, fw: &ForwardTarget) -> String {
+    let target = match (&fw.import, name) {
+        (Import::ByName(t), Some(n)) if t == n => fw.dll.to_string(),
+        (Import::ByName(t), _) => format!("{}!{}", fw.dll, t),
+        (Import::ByOrdinal(o), _) => format!("{}!#{}", fw.dll, o),
+    };
+    match name {
+        Some(n) => format!("{n} -> {target}"),
+        None => format!("-> {target}"),
+    }
+}
+
+fn decode_forward(target: &str, export_name: Option<&str>, ctx: &impl Fn() -> String) -> Result<ForwardTarget> {
+    match target.split_once('!') {
+        Some((dll, func)) => {
+            let import = if let Some(ord) = func.strip_prefix('#') {
+                Import::ByOrdinal(ord.parse().with_context(|| {
+                    format!("bad forward ordinal '{func}' in {}", ctx())
+                })?)
+            } else {
+                Import::ByName(func.to_owned())
+            };
+            Ok(ForwardTarget { dll: dll.into(), import })
+        }
+        None => {
+            let name = export_name.with_context(|| {
+                format!("forward '{target}' has no function name and export is unnamed in {}", ctx())
+            })?;
+            Ok(ForwardTarget { dll: target.into(), import: Import::ByName(name.to_owned()) })
+        }
+    }
+}
+
 pub fn read_ini(path: &Path) -> Result<(Vec<DllExports>, Option<(u16, u16)>)> {
     // rust_embed keys always use forward slashes.
     let embed_key = path.to_string_lossy().replace('\\', "/");
@@ -108,13 +143,13 @@ pub fn read_ini(path: &Path) -> Result<(Vec<DllExports>, Option<(u16, u16)>)> {
             continue;
         }
 
-        let mut exports: IndexMap<u16, Option<String>> = IndexMap::new();
+        let mut exports: IndexMap<u16, Export> = IndexMap::new();
         let mut exports_by_name: IndexMap<String, u16> = IndexMap::new();
 
         for (key, value) in props.iter() {
             if key == "__unnamed" {
                 for ordinal in decode_unnamed_ranges(value, path, dll_name)? {
-                    exports.insert(ordinal, None);
+                    exports.insert(ordinal, Export::default());
                 }
                 continue;
             }
@@ -126,15 +161,20 @@ pub fn read_ini(path: &Path) -> Result<(Vec<DllExports>, Option<(u16, u16)>)> {
                     path.display()
                 )
             })?;
-            let export_name = if value.is_empty() {
-                None
-            } else {
-                Some(value.to_owned())
+            let ctx = || format!("'[{}]' key {} of '{}'", dll_name, ordinal, path.display());
+            let (name_part, forward) = match value.split_once("->") {
+                Some((name, target)) => {
+                    let name = name.trim();
+                    let name = (!name.is_empty()).then_some(name);
+                    (name, Some(decode_forward(target.trim(), name, &ctx)?))
+                }
+                None => ((!value.is_empty()).then_some(value), None),
             };
+            let export_name = name_part.map(str::to_owned);
             if let Some(ref n) = export_name {
-                exports_by_name.insert(n.clone().into(), ordinal);
+                exports_by_name.insert(n.clone(), ordinal);
             }
-            exports.insert(ordinal, export_name);
+            exports.insert(ordinal, Export { name: export_name, forward });
         }
 
         result.push(DllExports {
@@ -234,6 +274,40 @@ mod tests {
         let encoded = encode_unnamed_ranges(&mut v);
         assert_eq!(encoded, "1,3");
     }
+
+    #[test]
+    fn forwards_roundtrip() {
+        let fwd = |dll: &str, import| Some(ForwardTarget { dll: dll.into(), import });
+        let exports: IndexMap<u16, Export> = IndexMap::from([
+            (1, Export { name: Some("Plain".into()), forward: None }),
+            (2, Export { name: Some("SameName".into()), forward: fwd("a.dll", Import::ByName("SameName".into())) }),
+            (3, Export { name: Some("Renamed".into()), forward: fwd("b.dll", Import::ByName("Other".into())) }),
+            (4, Export { name: Some("ByOrd".into()), forward: fwd("c.dll", Import::ByOrdinal(42)) }),
+            (5, Export { name: None, forward: fwd("d.dll", Import::ByName("Unnamed".into())) }),
+            (6, Export { name: None, forward: fwd("e.dll", Import::ByOrdinal(7)) }),
+            (7, Export { name: None, forward: None }),
+        ]);
+        let exports_by_name = exports
+            .iter()
+            .filter_map(|(&o, e)| e.name.clone().map(|n| (n, o)))
+            .collect();
+        let dll = DllExports {
+            name: "roundtrip.dll".into(),
+            exports,
+            exports_by_name,
+            subsystem_version: None,
+            is_dll: true,
+        };
+
+        let path = std::env::temp_dir().join("dll_checker_forward_roundtrip.ini");
+        write_ini(std::slice::from_ref(&dll), None, &path).unwrap();
+        let (read, _) = read_ini(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].exports, dll.exports);
+        assert_eq!(read[0].exports_by_name, dll.exports_by_name);
+    }
 }
 
 fn populate_dll_sections(ini: &mut Ini, dll_exports: &[DllExports]) {
@@ -245,15 +319,18 @@ fn populate_dll_sections(ini: &mut Ini, dll_exports: &[DllExports]) {
         let mut unnamed: Vec<u16> = entry
             .exports
             .iter()
-            .filter_map(|(&ord, name)| name.is_none().then_some(ord))
+            .filter_map(|(&ord, e)| (e.name.is_none() && e.forward.is_none()).then_some(ord))
             .collect();
         if !unnamed.is_empty() {
             section.set("__unnamed", encode_unnamed_ranges(&mut unnamed));
         }
-        for (ordinal, name) in &entry.exports {
-            if let Some(n) = name {
-                section.set(ordinal.to_string(), n.as_str());
-            }
+        for (ordinal, export) in &entry.exports {
+            let value = match (&export.name, &export.forward) {
+                (None, None) => continue,
+                (Some(n), None) => n.clone(),
+                (name, Some(fw)) => encode_forward(name.as_deref(), fw),
+            };
+            section.set(ordinal.to_string(), value);
         }
     }
 }

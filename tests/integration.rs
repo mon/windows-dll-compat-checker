@@ -83,6 +83,56 @@ fn two_layer_extend_missing_dll_fails() {
         .failure();
 }
 
+fn forward_ini(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("test_libs/forward").join(name)
+}
+
+#[test]
+fn forward_chain_resolves() {
+    let libs = test_libs();
+    cmd()
+        .arg(libs.join("test_input.dll"))
+        .args(["--system", forward_ini("good.ini").to_str().unwrap()])
+        .assert()
+        .success();
+}
+
+#[test]
+fn forward_to_missing_dll_fails() {
+    let libs = test_libs();
+    cmd()
+        .arg(libs.join("test_input.dll"))
+        .args(["--system", forward_ini("missing_dll.ini").to_str().unwrap()])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn forward_to_missing_export_fails_with_chain_in_error() {
+    let libs = test_libs();
+    let output = cmd()
+        .arg(libs.join("test_input.dll"))
+        .args(["--system", forward_ini("missing_export.ini").to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("forwards via 'impl_a.dll!DoesNotExist'"),
+        "stderr missing forward chain: {stderr}"
+    );
+}
+
+#[test]
+fn forward_cycle_fails() {
+    let libs = test_libs();
+    cmd()
+        .arg(libs.join("test_input.dll"))
+        .args(["--system", forward_ini("cycle.ini").to_str().unwrap()])
+        .assert()
+        .failure();
+}
+
 #[test]
 fn os_version_at_limit_passes() {
     let libs = test_libs();
